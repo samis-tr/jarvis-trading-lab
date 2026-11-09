@@ -39,6 +39,18 @@ Other commands (`.venv\Scripts\python -m jtl <command>`):
 | `paper-status` | Explains why paper trading is not allowed (Phase 4 is not built) |
 | `next-run` | When the next confirmed daily bar is due (NYSE close + delay, New York time) |
 
+## Daily forward test (automatic)
+
+The Windows Task Scheduler task `JarvisTradingLab-ForwardStep` runs `scriptsorward-step.ps1` every day
+at 23:30. If the PC was off, it runs later and catches up. Logs are in `var\logsorward-YYYY-MM.log`.
+View the results with `python -m jtl dashboard --forward`.
+
+Commands, in PowerShell:
+
+* Run a step now: `Start-ScheduledTask -TaskName JarvisTradingLab-ForwardStep`
+* Pause it: `Disable-ScheduledTask -TaskName JarvisTradingLab-ForwardStep`
+* Remove it: `Unregister-ScheduledTask -TaskName JarvisTradingLab-ForwardStep -Confirm:$false`
+
 ## Using real data (optional; needs your permission and keys)
 
 1. Create a free Alpaca account yourself and generate **paper** API keys (never live keys).
