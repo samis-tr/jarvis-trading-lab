@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+config.yaml
+var/
+reports/out/
+*.db
+*.db-wal
+*.db-shm
+.ruff_cache/
+.pytest_cache/
+*.egg-info/

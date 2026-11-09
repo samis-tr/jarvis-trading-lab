@@ -1,0 +1,13 @@
+# Pinned runtime + dev dependencies (all free / open source). Installed into .venv only.
+pydantic==2.14.3
+PyYAML==6.0.3
+numpy==2.5.4
+pandas==3.1.1
+exchange_calendars==4.13.2
+httpx==0.28.1
+fastapi==0.162.2
+uvicorn==0.54.0
+tzdata==2026.6
+# dev
+pytest==9.2.0
+ruff==0.17.4

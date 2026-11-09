@@ -1,0 +1,49 @@
+# Jarvis Trading Lab configuration (copy to config.yaml). Unknown keys are rejected (fail closed).
+# There is deliberately NO field for a broker URL, live mode, leverage, margin or shorting.
+mode: LOCAL_SIM            # only LOCAL_SIM is accepted in Phase 1-2
+symbols: [SPY]             # explicit allowlist; anything else is rejected
+
+strategy:
+  name: sma_trend
+  symbol: SPY
+  fast_window: 50
+  slow_window: 200
+
+risk:
+  max_risk_per_trade_pct: 0.005     # <= 0.5% of equity at risk per trade (to the protective stop)
+  max_position_pct: 0.20            # <= 20% of equity per position (incl. pending orders)
+  stop_loss_pct: 0.05               # protective stop distance used for risk sizing
+  daily_loss_pause_pct: 0.01        # daily loss >= 1% -> pause new entries for next session
+  weekly_loss_pause_pct: 0.02       # weekly loss >= 2% -> pause new entries until next week
+  max_drawdown_pct: 0.05            # peak-to-trough >= 5% -> LATCHED breaker (manual reset only)
+  max_orders_per_day: 2
+  allow_fractional: true
+
+simulator:
+  starting_cash: 1000.00
+  half_spread_bps: 2.0
+  slippage_bps: 3.0
+  latency_seconds: 2.0
+  latency_drift_bps: 1.0
+  commission_per_order: 0.00
+  sec_fee_rate: 0.0000278           # on sell notional (assumption; check current SEC rate)
+  finra_taf_per_share: 0.000166     # on sells, capped below (assumption)
+  finra_taf_max: 8.30
+  entry_price_buffer_pct: 0.03      # sizing buffer for overnight gaps before next-open fill
+
+data:
+  provider: sample                  # sample (SYNTHETIC, offline) | csv | alpaca (needs paper/data keys)
+  csv_path: data/sample/SPY_synthetic.csv
+  alpaca_feed: sip
+  min_history_years: 5
+  max_abs_daily_return: 0.15
+  bar_confirmation_delay_minutes: 60
+  holdout_fraction: 0.2
+
+storage:
+  db_path: var/jtl.db
+  backup_dir: var/backups
+
+dashboard:
+  host: 127.0.0.1                   # localhost only; any other value is rejected
+  port: 8765
