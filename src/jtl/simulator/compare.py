@@ -7,6 +7,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from pathlib import Path
 
 from jtl import HYPOTHETICAL_BANNER
@@ -27,6 +28,7 @@ class BotResult:
     halted: bool
     breakers: list[str]
     curve: list[tuple[str, float]]
+    status: dict = dataclass_field(default_factory=dict)
 
 
 def _with_cash(cfg: AppConfig, cash: float) -> AppConfig:
@@ -82,6 +84,21 @@ def _metrics(st: Storage, title: str, cash: float) -> Metrics:
     return Metrics(title, s, s, cash, v, v / cash - 1, 0.0, min(0.0, v / cash - 1), None)
 
 
+def _status(st: Storage) -> dict:
+    """Plain facts for the dashboard: in the market or in cash, pending order, last trade."""
+    pos = st.query("SELECT symbol, qty FROM positions")
+    eq = st.query("SELECT equity, cash, position_value FROM equity ORDER BY session DESC LIMIT 1")
+    pending = st.query("SELECT side FROM orders WHERE status = 'pending' LIMIT 1")
+    last = st.query("SELECT session, side, price, kind FROM fills ORDER BY rowid DESC LIMIT 1")
+    return {
+        "in_market": bool(pos),
+        "cash_now": float(eq[0][1]) if eq else None,
+        "invested_now": float(eq[0][2]) if eq else 0.0,
+        "pending_order": pending[0][0] if pending else None,
+        "last_trade": dict(zip(("session", "side", "price", "kind"), last[0], strict=True)) if last else None,
+    }
+
+
 def build_board(
     out: Path,
     bots: list[Strategy],
@@ -100,11 +117,12 @@ def build_board(
             breakers = [r[0] for r in st.query("SELECT name FROM breakers")]
             halted = "system_halt" in breakers
             curve = [(s, float(e)) for s, e in st.query("SELECT session, equity FROM equity ORDER BY session")]
+            status = _status(st)
         step = 5 if len(curve) > 300 else 1
         thin = curve[::step]
         if curve and thin[-1] != curve[-1]:
             thin.append(curve[-1])
-        results.append(BotResult(bot.name, bot.title, m, halted, breakers, thin))
+        results.append(BotResult(bot.name, bot.title, m, halted, breakers, thin, status))
     results.sort(key=lambda r: r.metrics.end_value, reverse=True)
     s0, s1 = results[0].metrics.start, results[0].metrics.end
     bench: list[Metrics] = []
@@ -134,6 +152,7 @@ def build_board(
                 "breakers": r.breakers,
                 **{k: v for k, v in r.metrics.as_dict().items() if k not in ("label", "notes", "disclaimer")},
                 "curve": r.curve,
+                **r.status,
             }
             for i, r in enumerate(results)
         ],

@@ -12,43 +12,12 @@ from fastapi.responses import HTMLResponse
 
 from jtl import HYPOTHETICAL_BANNER
 from jtl.config import LOCALHOST_HOSTS
+from jtl.dashboard.page import render_board
 from jtl.errors import ConfigRejected
 
 
 def _ro(db: Path) -> sqlite3.Connection:
     return sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True)
-
-
-COLORS = ["#4e9af1", "#f28e2b", "#59a14f", "#e15759", "#b07aa1", "#edc948", "#76b7b2", "#ff9da7"]
-STYLE = """body{font-family:system-ui;margin:16px;background:#111;color:#eee;max-width:1100px}
-.w{background:#c80;color:#000;padding:8px;border-radius:4px}table{border-collapse:collapse;width:100%;font-size:14px}
-td,th{padding:4px 8px;border-bottom:1px solid #333;text-align:right}td:nth-child(2),th:nth-child(2){text-align:left}
-a{color:#8cf}.scroll{overflow-x:auto}svg{width:100%;height:auto;background:#181818;border-radius:4px}
-.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}"""
-
-
-def _chart(bots: list[dict], cash: float) -> str:
-    curves = [[v for _, v in b["curve"]] for b in bots]
-    allv = [v for c in curves for v in c] + [cash]
-    lo, hi = min(allv), max(allv)
-    span = (hi - lo) or 1.0
-    w, h, pad = 1000, 320, 30
-    out = []
-    base_y = h - pad - (cash - lo) / span * (h - 2 * pad)
-    out.append(
-        f'<line x1="{pad}" x2="{w - pad}" y1="{base_y:.1f}" y2="{base_y:.1f}" stroke="#555" stroke-dasharray="4"/>'
-    )
-    out.append(f'<text x="{pad}" y="{base_y - 4:.1f}" fill="#888" font-size="12">start ${cash:,.0f}</text>')
-    for i, c in enumerate(curves):
-        n = max(len(c) - 1, 1)
-        pts = " ".join(
-            f"{pad + j / n * (w - 2 * pad):.1f},{h - pad - (v - lo) / span * (h - 2 * pad):.1f}"
-            for j, v in enumerate(c)
-        )
-        out.append(f'<polyline fill="none" stroke="{COLORS[i % len(COLORS)]}" stroke-width="2" points="{pts}"/>')
-    out.append(f'<text x="{pad}" y="{pad - 8}" fill="#888" font-size="12">${hi:,.2f}</text>')
-    out.append(f'<text x="{pad}" y="{h - 8}" fill="#888" font-size="12">${lo:,.2f}</text>')
-    return f'<svg viewBox="0 0 {w} {h}" role="img" aria-label="equity curves">{"".join(out)}</svg>'
 
 
 def create_app(db_path: str | Path | None = None, compare_dir: str | Path | None = None) -> FastAPI:
@@ -105,30 +74,7 @@ def create_app(db_path: str | Path | None = None, compare_dir: str | Path | None
         b = compare_data()
         if not b.get("bots"):
             return "<p>No comparison loaded.</p>"
-        e = html.escape
-        rows = "".join(
-            f"<tr><td>{r['rank']}</td><td><span class='sw' style='background:{COLORS[i % len(COLORS)]}'></span>"
-            f"{e(r['title'])}</td><td>${r['end_value']:,.2f}</td><td>{r['total_return']:+.2%}</td>"
-            f"<td>{r['cagr']:+.2%}</td><td>{r['max_drawdown']:.2%}</td><td>{r['trades']}</td>"
-            f"<td>{e(', '.join(r['breakers']) or '-')}</td></tr>"
-            for i, r in enumerate(b["bots"])
-        )
-        bench = "".join(
-            f"<tr><td></td><td>{e(m['label'])}</td><td>${m['end_value']:,.2f}</td><td>{m['total_return']:+.2%}</td>"
-            f"<td>{m['cagr']:+.2%}</td><td>{m['max_drawdown']:.2%}</td><td>-</td><td>-</td></tr>"
-            for m in b["benchmarks"]
-        )
-        notes = "".join(f"<li>{e(n)}</li>" for n in b["notes"])
-        return f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport"
-content="width=device-width,initial-scale=1"><title>Bot leaderboard</title><style>{STYLE}</style></head><body>
-<div class="w"><b>{e(b["disclaimer"])}</b></div>
-<h1>Bot leaderboard</h1>
-<p>Data: <b>{e(b["data_label"])}</b> &middot; {e(b["period"])}: {e(b["start"])} &rarr; {e(b["end"])}
- &middot; virtual cash per bot: <b>${b["starting_cash"]:,.2f}</b></p>
-<div class="scroll"><table><tr><th>#</th><th>Bot</th><th>End value</th><th>Return</th><th>CAGR</th>
-<th>Max drawdown</th><th>Trades</th><th>Breakers</th></tr>{rows}
-<tr><th colspan="8" style="text-align:left;padding-top:14px">Benchmarks (no risk limits, no costs)</th></tr>{bench}
-</table></div><h3>Equity of each bot</h3>{_chart(b["bots"], b["starting_cash"])}<ul>{notes}</ul></body></html>"""
+        return render_board(b)
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
