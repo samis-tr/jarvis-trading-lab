@@ -16,6 +16,7 @@ from jtl.market_data import calendar
 from jtl.market_data.models import BarSeries
 from jtl.market_data.validation import ValidationReport, validate_series
 from jtl.storage.db import Storage
+from jtl.strategy.base import Strategy
 from jtl.supervisor.supervisor import SessionResult, Supervisor
 
 
@@ -33,7 +34,13 @@ class ReplayResult:
 
 
 def run_replay(
-    cfg: AppConfig, series: BarSeries, db_path: str | Path, *, start: dt.date | None = None, end: dt.date | None = None
+    cfg: AppConfig,
+    series: BarSeries,
+    db_path: str | Path,
+    *,
+    start: dt.date | None = None,
+    end: dt.date | None = None,
+    strategy: Strategy | None = None,
 ) -> ReplayResult:
     db_path = Path(db_path)
     if db_path.exists():
@@ -46,12 +53,13 @@ def run_replay(
     by_session = {b.session: i for i, b in enumerate(series.bars)}
     results: list[SessionResult] = []
     with Storage(db_path) as st:
-        sup = Supervisor(cfg, st)
+        sup = Supervisor(cfg, st, strategy=strategy)
         st.record(
             calendar.session_open(start).isoformat(),
             "run_started",
             {
                 "mode": cfg.mode.value,
+                "strategy": sup.strategy.name,
                 "symbol": series.symbol,
                 "data_label": series.provenance.label,
                 "data_source": series.provenance.source.value,

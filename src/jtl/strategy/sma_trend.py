@@ -7,25 +7,9 @@ session (t+1). The strategy receives a point-in-time view and asserts it never s
 from __future__ import annotations
 
 import datetime as dt
-from enum import StrEnum
-
-from pydantic import BaseModel, ConfigDict
 
 from jtl.market_data.models import BarSeries
-
-
-class Target(StrEnum):
-    LONG = "long"
-    FLAT = "flat"
-
-
-class Signal(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-    symbol: str
-    session: dt.date  # decided on this session's confirmed close
-    target: Target
-    fast_sma: float
-    slow_sma: float
+from jtl.strategy.base import Signal, Target, check_view
 
 
 class SmaTrend:
@@ -33,25 +17,23 @@ class SmaTrend:
         if not 2 <= fast < slow:
             raise ValueError("need 2 <= fast < slow")
         self.symbol, self.fast, self.slow = symbol, fast, slow
+        self.name = f"sma{fast}-{slow}"
+        self.title = f"Moving-average trend {fast}/{slow}"
 
     @property
     def warmup(self) -> int:
         return self.slow
 
     def signal(self, view: BarSeries, as_of: dt.date) -> Signal | None:
-        if view.symbol != self.symbol:
-            raise ValueError("wrong symbol")
-        if view.bars and view.bars[-1].session > as_of:
-            raise AssertionError("look-ahead: view contains bars after as_of")
-        if not view.bars or view.bars[-1].session != as_of or len(view.bars) < self.slow:
+        if not check_view(self, view, as_of):
             return None
         closes = [b.close for b in view.bars[-self.slow :]]
         slow = sum(closes) / self.slow
         fast = sum(closes[-self.fast :]) / self.fast
         return Signal(
+            strategy=self.name,
             symbol=self.symbol,
             session=as_of,
             target=Target.LONG if fast > slow else Target.FLAT,
-            fast_sma=round(fast, 6),
-            slow_sma=round(slow, 6),
+            metrics={"fast_sma": round(fast, 6), "slow_sma": round(slow, 6)},
         )

@@ -92,6 +92,45 @@ def cmd_sim(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_compare(a: argparse.Namespace) -> int:
+    from jtl import research
+    from jtl.simulator.compare import run_comparison
+    from jtl.strategy import default_lineup
+
+    cfg = _cfg(a.config)
+    price, tr = _load_series(cfg, a.csv, a.tr_csv)
+    ins, holdout = research.split(
+        price, holdout_fraction=cfg.data.holdout_fraction, min_years=cfg.data.min_history_years
+    )
+    if a.final_holdout:
+        held = holdout.open_for_final_evaluation(a.final_holdout)
+        hist = tuple(b for b in price.bars if b.session < holdout.first_session)[-400:]
+        series = BarSeries(symbol=price.symbol, provenance=price.provenance, bars=hist + held.bars)
+        period = "out-of-sample (final, opened once)"
+    else:
+        series, period = ins.series, "in-sample"
+    cash = a.cash if a.cash is not None else cfg.simulator.starting_cash
+    name = a.name or f"compare-{dt.datetime.now():%Y%m%d-%H%M%S}"
+    out = PROJECT_ROOT / "var" / "compare" / name
+    board = run_comparison(
+        cfg, series, out, bots=default_lineup(cfg.strategy.symbol), cash=cash, total_return=tr, period_label=period
+    )
+    if a.final_holdout:
+        # bots start after the 400 warm-up bars, which all lie before the holdout
+        assert board["start"] >= holdout.first_session.isoformat()
+    print(HYPOTHETICAL_BANNER)
+    print(f"Data: {board['data_label']}  |  {period}: {board['start']} -> {board['end']}  |  cash per bot ${cash:,.2f}")
+    for r in board["bots"]:
+        print(
+            f"  #{r['rank']} {r['title']:38s} end=${r['end_value']:>9.2f}  ret={r['total_return']:+7.2%}  "
+            f"maxDD={r['max_drawdown']:7.2%}  trades={r['trades']}"
+        )
+    for m in board["benchmarks"]:
+        print(f"     {m['label']:60s} end=${m['end_value']:>9.2f}  ret={m['total_return']:+7.2%}")
+    print(f"Leaderboard: {out / 'leaderboard.md'}")
+    return 0
+
+
 def cmd_gate(a: argparse.Namespace) -> int:
     from jtl.market_data.sample import synthetic_pair
     from jtl.safety.gate import write_gate
@@ -204,7 +243,12 @@ def cmd_dashboard(a: argparse.Namespace) -> int:
 
     cfg = _cfg(a.config)
     print(f"Dashboard (read-only) on http://{cfg.dashboard.host}:{cfg.dashboard.port}  - Ctrl+C to stop")
-    serve(_db(a), cfg.dashboard.host, cfg.dashboard.port)
+    compare_dir = None
+    if a.compare:
+        compare_dir = Path(a.compare)
+        if not compare_dir.is_absolute():
+            compare_dir = PROJECT_ROOT / "var" / "compare" / a.compare
+    serve(_db(a), cfg.dashboard.host, cfg.dashboard.port, compare_dir=compare_dir)
     return 0
 
 
@@ -226,6 +270,13 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--name")
     s.add_argument("--final-holdout", metavar="REASON", help="open the sealed out-of-sample slice ONCE")
     s.set_defaults(fn=cmd_sim)
+    c = sub.add_parser("compare", help="run every bot on its own virtual account and rank them")
+    c.add_argument("--cash", type=float)
+    c.add_argument("--csv")
+    c.add_argument("--tr-csv")
+    c.add_argument("--name")
+    c.add_argument("--final-holdout", metavar="REASON", help="open the sealed out-of-sample slice ONCE")
+    c.set_defaults(fn=cmd_compare)
     sub.add_parser("gate", help="run tests + local simulation and record the paper gate").set_defaults(fn=cmd_gate)
     sub.add_parser("paper-status", help="show why paper trading is (not) allowed").set_defaults(fn=cmd_paper_status)
     f = sub.add_parser("fetch-data", help="fetch Alpaca daily bars (needs YOUR paper/data keys in env)")
@@ -240,6 +291,8 @@ def main(argv: list[str] | None = None) -> int:
     ):
         x = sub.add_parser(name)
         x.add_argument("--db")
+        if name == "dashboard":
+            x.add_argument("--compare", help="leaderboard folder name under var/compare")
         x.set_defaults(fn=fn)
     r = sub.add_parser("reset-breaker", help="HUMAN-ONLY reset of a latched breaker")
     r.add_argument("--db")

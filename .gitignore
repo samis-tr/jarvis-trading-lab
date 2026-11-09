@@ -13,3 +13,4 @@ reports/out/
 .ruff_cache/
 .pytest_cache/
 *.egg-info/
+data/alpaca/

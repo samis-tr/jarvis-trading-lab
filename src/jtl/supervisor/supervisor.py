@@ -27,10 +27,12 @@ from jtl.risk.engine import RiskEngine, Snapshot
 from jtl.simulator.broker import LocalSimBroker
 from jtl.simulator.costs import CostModel
 from jtl.storage.db import Storage
-from jtl.strategy.sma_trend import SmaTrend, Target
+from jtl.strategy.base import Strategy, Target
+from jtl.strategy.sma_trend import SmaTrend
 
 Q = Decimal("0.0001")
 FULL_VERIFY_EVERY = 20  # sessions
+REARM_COOLDOWN_DAYS = 28  # after a stop-out: wait for a FLAT signal or this many calendar days
 
 
 @dataclass
@@ -51,12 +53,14 @@ def order_id(strategy: str, symbol: str, session: dt.date, side: Side) -> str:
 
 class Supervisor:
     def __init__(
-        self, cfg: AppConfig, storage: Storage, broker: LocalSimBroker | None = None, strategy: SmaTrend | None = None
+        self, cfg: AppConfig, storage: Storage, broker: LocalSimBroker | None = None, strategy: Strategy | None = None
     ):
         self.cfg = cfg
         self.storage = storage
         self.broker = broker or LocalSimBroker(storage, CostModel(cfg.simulator), cfg.risk.stop_loss_pct)
-        self.strategy = strategy or SmaTrend(cfg.strategy.symbol, cfg.strategy.fast_window, cfg.strategy.slow_window)
+        self.strategy: Strategy = strategy or SmaTrend(
+            cfg.strategy.symbol, cfg.strategy.fast_window, cfg.strategy.slow_window
+        )
         self.breakers = BreakerBook(storage)
         cost_bps = cfg.simulator.half_spread_bps + cfg.simulator.slippage_bps + cfg.simulator.latency_drift_bps
         self.risk = RiskEngine(
@@ -113,7 +117,7 @@ class Supervisor:
             fills += self.broker.check_stops(s, {sym: bar}, open_ts)
             res.fills = len(fills)
             if any(f.kind.startswith("stop") for f in fills):
-                self._set_rearm(sym, True)
+                self._set_rearm(sym, s)
 
             # CLOSE
             ts = self._close_ts(s)
@@ -154,9 +158,9 @@ class Supervisor:
         acct = self.broker.account()
         held = acct.positions.get(sym, Decimal(0))
         if sig.target is Target.FLAT:
-            self._set_rearm(sym, False)
+            self._set_rearm(sym, None)
         intent: OrderIntent | None = None
-        if sig.target is Target.LONG and held == 0 and not self._rearm_required(sym):
+        if sig.target is Target.LONG and held == 0 and not self._rearm_required(sym, s):
             snap = self._snapshot(s, close_px)
             qty = self.risk.max_buy_qty(snap, sym)
             if qty <= 0:
@@ -164,21 +168,21 @@ class Supervisor:
                 self.storage.record(ts, "order_rejected", {"session": s, "reasons": ["sized to zero"]})
                 return
             intent = OrderIntent(
-                client_order_id=order_id("sma", sym, s, Side.BUY),
+                client_order_id=order_id(self.strategy.name, sym, s, Side.BUY),
                 symbol=sym,
                 side=Side.BUY,
                 qty=qty,
                 created_session=s,
-                reason="sma trend entry",
+                reason=f"{self.strategy.name} entry",
             )
         elif sig.target is Target.FLAT and held > 0:
             intent = OrderIntent(
-                client_order_id=order_id("sma", sym, s, Side.SELL),
+                client_order_id=order_id(self.strategy.name, sym, s, Side.SELL),
                 symbol=sym,
                 side=Side.SELL,
                 qty=held,
                 created_session=s,
-                reason="sma trend exit",
+                reason=f"{self.strategy.name} exit",
             )
         if intent is not None:
             self.submit(intent, close_px, ts, res)
@@ -275,9 +279,13 @@ class Supervisor:
         with self.storage.tx() as c:
             self.storage.kv_set(c, "last_session", s.isoformat())
 
-    def _rearm_required(self, sym: str) -> bool:
-        return self.storage.kv_get(f"rearm:{sym}") == "1"
+    def _rearm_required(self, sym: str, s: dt.date) -> bool:
+        """After a protective stop, no re-entry until a FLAT signal or a cooldown has passed."""
+        v = self.storage.kv_get(f"rearm:{sym}") or ""
+        if not v:
+            return False
+        return (s - dt.date.fromisoformat(v)).days < REARM_COOLDOWN_DAYS
 
-    def _set_rearm(self, sym: str, value: bool) -> None:
+    def _set_rearm(self, sym: str, stopped_on: dt.date | None) -> None:
         with self.storage.tx() as c:
-            self.storage.kv_set(c, f"rearm:{sym}", "1" if value else "0")
+            self.storage.kv_set(c, f"rearm:{sym}", stopped_on.isoformat() if stopped_on else "")

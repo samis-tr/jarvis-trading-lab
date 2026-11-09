@@ -1,5 +1,42 @@
 # Progress
 
+## 2026-11-09 (later): real data + bot comparison
+
+* The user set their own Alpaca **paper** keys (User env vars; the prefix was checked, the values were never shown).
+* Fetched real SPY daily bars from Alpaca: `data/alpaca/SPY_split.csv` and `SPY_all.csv`.
+  * 2,728 sessions, 2016-01-04 to 2026-11-06, SIP feed.
+  * Validation found **0 issues**.
+  * The data is gitignored.
+* `config.yaml` now uses `data.provider: alpaca` and `starting_cash: 100`.
+* New bots, all signals-only and under the same risk engine:
+  * moving-average trend 50/200, 20/100 and 10/50
+  * momentum over 63 and 126 days
+  * risk-limited buy & hold
+* After a stop-out, a bot re-enters after a FLAT signal or a 28-day cooldown.
+* `jtl compare` runs each bot on its own fresh ledger with identical cash, start date, costs and limits,
+  then ranks them. `jtl dashboard --compare NAME` shows the leaderboard page.
+* Tests: **120 passed**. Ruff is clean.
+
+### First real-data comparison ($100 virtual each, in-sample 2016-10-18 to 2024-09-04, HYPOTHETICAL)
+
+| # | Bot | End value | Return | Max DD | Trades |
+|---|---|---|---|---|---|
+| 1 | Buy & hold (risk-limited) | $115.76 | +15.76% | -5.11% (drawdown breaker latched in 2020) | 1 |
+| 2 | MA trend 50/200 | $108.28 | +8.28% | -2.32% | 9 |
+| 3 | MA trend 20/100 | $107.04 | +7.04% | -2.45% | 21 |
+| 4 | Momentum 63 | $105.07 | +5.07% | -2.88% | 83 |
+| 5 | Momentum 126 | $104.69 | +4.69% | -3.26% | 65 |
+| 6 | MA trend 10/50 | $103.64 | +3.64% | -2.13% | 47 |
+
+The benchmark, SPY buy & hold 100% invested, reached $257.16 price-only and $292.13 total return,
+with about a -34% max drawdown.
+
+* The bots sit mostly in cash because of the risk policy, which caps risk at 0.5% per trade with a
+  5% stop.
+* The out-of-sample period (2024-09 onwards) is still sealed.
+* No bot is claimed to be profitable going forward.
+
+
 ## 2026-11-09: Phase 1 + Phase 2 complete
 
 ### Done
