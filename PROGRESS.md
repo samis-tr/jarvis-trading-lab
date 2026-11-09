@@ -2,7 +2,7 @@
 
 ## 2026-11-09 (evening): daily forward mode
 
-* `jtl forward-step` / `scriptsorward-step.ps1` run the forward paper test. Each bot has a persistent
+* `jtl forward-step` / `scripts\forward-step.ps1` run the forward paper test. Each bot has a persistent
   $100 virtual account in `var/forward/<bot>.db`, and the leaderboard is `var/forward/leaderboard.json`.
 * Each step:
   * fetches fresh Alpaca bars, stopping 20 minutes before now
@@ -15,7 +15,7 @@
   fill at the 2026-11-09 open.
 * Tests: **125 passed**. Ruff is clean.
 * Automatic scheduling (created with the user's OK): the Windows Task Scheduler task
-  **JarvisTradingLab-ForwardStep** runs `scriptsorward-step.ps1`.
+  **JarvisTradingLab-ForwardStep** runs `scripts\forward-step.ps1`.
   * Runs daily at 23:30 local time, as the current user only when logged on, with limited rights.
   * If the PC was off at 23:30, it starts at the next opportunity.
   * The test run through Task Scheduler on 2026-11-09 exited with code 0.

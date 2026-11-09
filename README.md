@@ -30,7 +30,7 @@ Other commands (`.venv\Scripts\python -m jtl <command>`):
 | `sim [--csv F --tr-csv F]` | Deterministic replay on the **in-sample** slice; writes `reports\out\*.md/json` and a ledger DB in `var\runs\` |
 | `sim --final-holdout "reason"` | Opens the sealed out-of-sample slice **once** for a final check (never use it to tune) |
 | `compare [--cash 100]` | Runs every bot on its **own** virtual account (same data, start, costs, risk) and ranks them -> `var\compare\<name>\leaderboard.md` |
-| `forward-step [--offline]` | Daily FORWARD paper test: fetches the newest confirmed bars and advances each bot's own $100 virtual account (catches up missed days; safe to repeat). Script: `scriptsorward-step.ps1` (logs to `var\logs`) |
+| `forward-step [--offline]` | Daily FORWARD paper test: fetches the newest confirmed bars and advances each bot's own $100 virtual account (catches up missed days; safe to repeat). Script: `scripts\forward-step.ps1` (logs to `var\logs`) |
 | `dashboard --forward` | Read-only forward leaderboard |
 | `dashboard --compare <name>` | Read-only leaderboard page with equity curves on http://127.0.0.1:8765 |
 | `fetch-data --start 2016-01-01 --end 2025-12-31` | Fetches Alpaca daily bars (split-adjusted and total-return). Needs **your own** paper/data keys in env vars |
@@ -41,8 +41,8 @@ Other commands (`.venv\Scripts\python -m jtl <command>`):
 
 ## Daily forward test (automatic)
 
-The Windows Task Scheduler task `JarvisTradingLab-ForwardStep` runs `scriptsorward-step.ps1` every day
-at 23:30. If the PC was off, it runs later and catches up. Logs are in `var\logsorward-YYYY-MM.log`.
+The Windows Task Scheduler task `JarvisTradingLab-ForwardStep` runs `scripts\forward-step.ps1` every day
+at 23:30. If the PC was off, it runs later and catches up. Logs are in `var\logs\forward-YYYY-MM.log`.
 View the results with `python -m jtl dashboard --forward`.
 
 Commands, in PowerShell:
