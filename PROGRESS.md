@@ -132,3 +132,11 @@ with about a -34% max drawdown.
 * With permission, fetch real SPY bars (2016 onwards), validate them, and run the in-sample study.
   Open the holdout only once.
 * Phase 3 research tooling.
+
+## 2026-11-09 - Live price view (display only)
+* `market_data/live.py`: latest IEX trade through the guarded data client, 20 s cache, never raises.
+* `/api/live` (GET only, forward boards only): live SPY price and each bot's value marked to it;
+  prices more than 15% from the last close are ignored. Nothing is written to any ledger.
+* Dashboard live strip polls every 30 s while the market is open, every 5 min otherwise.
+* Paper keys are also read from the Windows *user* environment (still env vars only, disabled in tests).
+* Tests: 130 passing.

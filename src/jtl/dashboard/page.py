@@ -59,7 +59,58 @@ summary{cursor:pointer;font-weight:600}
 td,th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
 td:first-child,th:first-child{text-align:left}
 .en{color:var(--muted);font-size:12px;margin-top:18px;direction:ltr;text-align:left}
+.live{margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--card);
+border:1px solid var(--line);border-radius:12px;padding:12px 16px}
+.pulse{width:10px;height:10px;border-radius:50%;background:var(--flat);flex:none}
+.pulse.on{background:#e5484d;animation:p 1.4s infinite}@keyframes p{50%{opacity:.25}}
+.live b{font-size:18px}.live .m{color:var(--muted);font-size:13px}
+.tag{font-size:12px;color:var(--muted)}
 """
+
+
+LIVE_BOX = """<div class="live" id="live"><span class="pulse" id="lp"></span>
+<span id="lt">السعر المباشر: عم يحمّل...</span><span class="m" id="lm"></span></div>"""
+
+LIVE_JS = """<script>
+const fmt = v => "$" + v.toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const pct = v => (v >= 0 ? "+" : "") + (v * 100).toFixed(2) + "%";
+const ltr = s => "<span dir='ltr'>" + s + "</span>";
+async function tick() {
+  let next = 300000;
+  try {
+    const r = await fetch("/api/live", {cache: "no-store"});
+    const d = await r.json();
+    const lp = document.getElementById("lp"), lt = document.getElementById("lt"), lm = document.getElementById("lm");
+    if (d.market_open) next = 30000;
+    if (!d.ok) {
+      lp.className = "pulse";
+      lt.textContent = "السعر المباشر مش متوفر هلأ";
+      lm.textContent = d.market_open ? "" : "السوق مسكّر - بيفتح 15:30 بتوقيتك بأيام التداول";
+    } else {
+      lp.className = d.market_open ? "pulse on" : "pulse";
+      const t = new Date(d.time).toLocaleTimeString("de-DE", {hour: "2-digit", minute: "2-digit", second: "2-digit"});
+      const ch = d.last_close ? d.price / d.last_close - 1 : 0;
+      lt.innerHTML = (d.market_open ? "مباشر" : "آخر سعر") + ": SPY <b>" + ltr(fmt(d.price)) + "</b> " + ltr("(" + pct(ch) + ")");
+      lm.textContent = "الساعة " + t + (d.market_open ? " - بيتحدّث كل 30 ثانية" : " - السوق مسكّر") +
+        " - للعرض بس، البوتات بتقرر مرة باليوم";
+      for (const [name, b] of Object.entries(d.bots)) {
+        if (!b.live) continue;
+        const v = document.querySelector("[data-v='" + name + "']");
+        const p = document.querySelector("[data-p='" + name + "']");
+        const tag = document.querySelector("[data-t='" + name + "']");
+        if (v) v.innerHTML = ltr(fmt(b.value));
+        if (p) {
+          p.innerHTML = ltr(pct(b.change));
+          p.className = "pill " + (b.change > 0.00005 ? "up" : b.change < -0.00005 ? "down" : "flat");
+        }
+        if (tag) tag.textContent = "مباشر";
+      }
+    }
+  } catch (e) { /* keep the last values */ }
+  setTimeout(tick, next);
+}
+tick();
+</script>"""
 
 
 def _money(v: float) -> str:
@@ -142,8 +193,8 @@ def render_board(b: dict) -> str:
             f"""<div class="card{" first" if r["rank"] == 1 else ""}">
 <div class="top"><div class="rank">{r["rank"]}</div><div class="name">{e(name)}</div></div>
 <div class="desc">{e(desc)}</div>
-<div class="val"><span class="big">{_money(float(r["end_value"]))}</span>
-<span class="pill {_cls(ret)}">{_pct(ret)}</span></div>
+<div class="val"><span class="big" data-v="{e(r["name"])}">{_money(float(r["end_value"]))}</span>
+<span class="pill {_cls(ret)}" data-p="{e(r["name"])}">{_pct(ret)}</span><span class="tag" data-t="{e(r["name"])}"></span></div>
 {_spark(r.get("curve") or [], cash)}
 <div class="st"><span class="dot" style="background:{color}"></span><span>{status}</span></div>
 <div class="foot">عدد الصفقات: {r["trades"]} &middot; {_last_trade(r)}</div></div>"""
@@ -177,6 +228,7 @@ def render_board(b: dict) -> str:
 <div class="box"><div class="k">التحديث</div><div class="v" style="font-size:15px">{updated}</div></div>
 {spy_box}
 </div>
+{LIVE_BOX if forward else ""}
 <h2>البوتات (الأحسن أول)</h2>
 <div class="grid">{"".join(cards)}</div>
 <h2>كيف بيشتغل؟</h2>
@@ -192,4 +244,4 @@ def render_board(b: dict) -> str:
 {rows}</table></div>
 <p class="en">Data: {e(b["data_label"])} &middot; {e(b["period"])}</p></details>
 <p class="en">{e(b.get("disclaimer", HYPOTHETICAL_BANNER))}</p>
-</div></body></html>"""
+</div>{LIVE_JS if forward else ""}</body></html>"""

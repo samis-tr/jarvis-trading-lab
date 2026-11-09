@@ -14,13 +14,18 @@ from jtl import HYPOTHETICAL_BANNER
 from jtl.config import LOCALHOST_HOSTS
 from jtl.dashboard.page import render_board
 from jtl.errors import ConfigRejected
+from jtl.market_data.live import LivePrice, market_open_now
+
+MAX_LIVE_MOVE = 0.15  # ignore a live price more than 15% away from the last close (bad tick)
 
 
 def _ro(db: Path) -> sqlite3.Connection:
     return sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True)
 
 
-def create_app(db_path: str | Path | None = None, compare_dir: str | Path | None = None) -> FastAPI:
+def create_app(
+    db_path: str | Path | None = None, compare_dir: str | Path | None = None, live: LivePrice | None = None
+) -> FastAPI:
     db = Path(db_path) if db_path else Path("__none__.db")
     board_file = Path(compare_dir) / "leaderboard.json" if compare_dir else None
     app = FastAPI(
@@ -69,6 +74,31 @@ def create_app(db_path: str | Path | None = None, compare_dir: str | Path | None
             return {"hypothetical": True, "bots": [], "benchmarks": []}
         return json.loads(board_file.read_text(encoding="utf-8"))
 
+    @app.get("/api/live")
+    def live_data() -> dict:
+        """DISPLAY ONLY: today's value of each bot at the latest real-time price. Never trades."""
+        b = compare_data()
+        out: dict = {"hypothetical": True, "ok": False, "market_open": market_open_now(), "bots": {}}
+        if live is None or not b.get("bots") or not str(b.get("period", "")).startswith("FORWARD"):
+            out["reason"] = "live view only for the forward test"
+            return out
+        quote, err = live.get()
+        last_close = b.get("last_close")
+        if quote is None:
+            out["reason"] = err or "no price"
+            return out
+        if last_close and abs(quote.price / float(last_close) - 1) > MAX_LIVE_MOVE:
+            out["reason"] = "price looks wrong - ignored"
+            return out
+        cash = float(b["starting_cash"])
+        for r in b["bots"]:
+            qty = float(r.get("qty_now") or 0.0)
+            c = r.get("cash_now")
+            value = (float(c) + qty * quote.price) if (qty and c is not None) else float(r["end_value"])
+            out["bots"][r["name"]] = {"value": round(value, 2), "change": value / cash - 1, "live": bool(qty)}
+        out.update(ok=True, price=quote.price, time=quote.time.isoformat(), source=quote.source, last_close=last_close)
+        return out
+
     @app.get("/compare", response_class=HTMLResponse)
     def compare_page() -> str:
         b = compare_data()
@@ -108,4 +138,9 @@ def serve(
         raise ConfigRejected("dashboard binds to localhost only")
     import uvicorn
 
-    uvicorn.run(create_app(db_path, compare_dir), host=host, port=port, log_level="warning")
+    live = None
+    if compare_dir is not None:
+        board = Path(compare_dir) / "leaderboard.json"
+        sym = json.loads(board.read_text(encoding="utf-8")).get("symbol", "SPY") if board.exists() else "SPY"
+        live = LivePrice(sym)
+    uvicorn.run(create_app(db_path, compare_dir, live), host=host, port=port, log_level="warning")

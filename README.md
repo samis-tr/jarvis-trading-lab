@@ -45,6 +45,11 @@ The Windows Task Scheduler task `JarvisTradingLab-ForwardStep` runs `scripts\for
 at 23:30. If the PC was off, it runs later and catches up. Logs are in `var\logs\forward-YYYY-MM.log`.
 View the results with `python -m jtl dashboard --forward`.
 
+**Live price strip.** While the US market is open, the forward dashboard shows the live SPY price
+(Alpaca free IEX feed, cached 20 s, polled every 30 s) and what each bot's holdings are worth right now.
+It is display only: it never trades, never writes the journal, and it ignores any price more than 15% away from
+the last close. The bots still decide once per day, on the confirmed close.
+
 Commands, in PowerShell:
 
 * Run a step now: `Start-ScheduledTask -TaskName JarvisTradingLab-ForwardStep`

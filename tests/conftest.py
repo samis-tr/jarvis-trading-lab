@@ -32,6 +32,7 @@ def _no_network(monkeypatch):
 
     monkeypatch.setattr(socket.socket, "connect", guard)
     monkeypatch.setattr(socket, "create_connection", no_create)
+    monkeypatch.setenv("JTL_NO_USER_ENV", "1")  # never pick up the real user's keys in tests
     for v in ("APCA_API_BASE_URL", "ALPACA_BASE_URL", "APCA_API_KEY_ID", "APCA_API_SECRET_KEY"):
         monkeypatch.delenv(v, raising=False)
 

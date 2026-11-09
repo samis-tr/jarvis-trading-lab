@@ -92,6 +92,7 @@ def _status(st: Storage) -> dict:
     last = st.query("SELECT session, side, price, kind FROM fills ORDER BY rowid DESC LIMIT 1")
     return {
         "in_market": bool(pos),
+        "qty_now": float(sum(float(q) for _, q in pos)) if pos else 0.0,
         "cash_now": float(eq[0][1]) if eq else None,
         "invested_now": float(eq[0][2]) if eq else 0.0,
         "pending_order": pending[0][0] if pending else None,
@@ -143,6 +144,8 @@ def build_board(
         "end": s1.isoformat(),
         "starting_cash": cash,
         "currency": "USD",
+        "symbol": series.symbol,
+        "last_close": next((b.close for b in reversed(series.bars) if b.session <= s1), None),
         "bots": [
             {
                 "rank": i + 1,
