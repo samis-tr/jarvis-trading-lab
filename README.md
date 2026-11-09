@@ -79,3 +79,10 @@ Commands, in PowerShell:
 * كل الأرقام اللي بيطلعها **افتراضية (Hypothetical)**، والبيانات المرفقة **اصطناعية** وما هي أسعار حقيقية.
 * للتشغيل: شغّل `scripts\setup.ps1` مرة وحدة، وبعدها `scripts\start-sim.ps1`.
 * البيانات الحقيقية من Alpaca اختيارية، وبدها مفاتيح **paper** تبعك بمتغيرات البيئة بس.
+
+## Disclaimer and license
+
+This is an educational research and simulation project. It is **not financial advice**, it does not trade
+real money, and simulated results say nothing reliable about future returns. Use at your own risk.
+
+Released under the [MIT License](LICENSE).
