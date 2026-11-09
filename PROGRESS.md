@@ -1,5 +1,23 @@
 # Progress
 
+## 2026-11-09 (evening): daily forward mode
+
+* `jtl forward-step` / `scriptsorward-step.ps1` run the forward paper test. Each bot has a persistent
+  $100 virtual account in `var/forward/<bot>.db`, and the leaderboard is `var/forward/leaderboard.json`.
+* Each step:
+  * fetches fresh Alpaca bars, stopping 20 minutes before now
+  * drops intraday (unconfirmed) bars
+  * refuses stale data
+  * halts a bot if an already-used close was revised (split or correction)
+  * catches up missed days in order; repeating a step is harmless
+* The keys are loaded from the User env into the process only, and never printed.
+* First real step: started on **2026-11-06**. Three bots (sma50-200, sma20-100, hold) placed buys that
+  fill at the 2026-11-09 open.
+* Tests: **125 passed**. Ruff is clean.
+* Not done: automatic daily scheduling. This needs the user's OK, because it creates a Windows
+  scheduled task.
+
+
 ## 2026-11-09 (later): real data + bot comparison
 
 * The user set their own Alpaca **paper** keys (User env vars; the prefix was checked, the values were never shown).

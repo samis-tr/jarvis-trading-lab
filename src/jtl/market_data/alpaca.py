@@ -60,7 +60,7 @@ class AlpacaDailyBars:
     def close(self) -> None:
         self._client.close()
 
-    def fetch(self, symbol: str, start: dt.date, end: dt.date, adjustment: Adjustment) -> BarSeries:
+    def fetch(self, symbol: str, start: dt.date, end: dt.date | dt.datetime, adjustment: Adjustment) -> BarSeries:
         params: dict[str, str] = {
             "symbols": symbol,
             "timeframe": "1Day",

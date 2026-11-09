@@ -194,6 +194,45 @@ def cmd_fetch(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_forward_step(a: argparse.Namespace) -> int:
+    """Fetch the newest confirmed bars and advance every bot's forward paper account."""
+    from jtl.market_data.alpaca import AlpacaDailyBars
+    from jtl.market_data.models import Adjustment
+    from jtl.market_data.store import load_csv, save_csv
+    from jtl.simulator.forward import forward_step
+    from jtl.strategy import default_lineup
+
+    cfg = _cfg(a.config)
+    sym = cfg.strategy.symbol
+    base = PROJECT_ROOT / "data" / "alpaca"
+    now = dt.datetime.now(dt.UTC)
+    if not a.offline:
+        # free Alpaca SIP data excludes the most recent 15 minutes -> stop 20 minutes ago
+        client = AlpacaDailyBars(feed=cfg.data.alpaca_feed)
+        try:
+            for adj in (Adjustment.SPLIT, Adjustment.ALL):
+                save_csv(
+                    client.fetch(sym, dt.date(2016, 1, 4), now - dt.timedelta(minutes=20), adj),
+                    base / f"{sym}_{adj.value}.csv",
+                )
+        finally:
+            client.close()
+    price, tr = load_csv(base / f"{sym}_split.csv"), load_csv(base / f"{sym}_all.csv")
+    res = forward_step(cfg, price, PROJECT_ROOT / "var" / "forward", bots=default_lineup(sym), now=now, total_return=tr)
+    print(HYPOTHETICAL_BANNER)
+    print(f"{now:%Y-%m-%d %H:%M} UTC | latest confirmed session: {res.latest_session}")
+    for s in res.bots:
+        what = "started" if s.started else (f"processed {', '.join(s.processed)}" if s.processed else "up to date")
+        print(
+            f"  {s.name:10s} {what}"
+            + (f" | new orders: {len(s.submitted)}" if s.submitted else "")
+            + (f" | BLOCKED: {'; '.join(s.blocked)}" if s.blocked else "")
+        )
+    for r in res.board["bots"]:
+        print(f"  #{r['rank']} {r['title']:38s} ${r['end_value']:>8.2f}  ({r['total_return']:+.2%})")
+    return 0
+
+
 def _db(a: argparse.Namespace) -> Path:
     return Path(a.db) if a.db else PROJECT_ROOT / "var" / "jtl.db"
 
@@ -243,7 +282,7 @@ def cmd_dashboard(a: argparse.Namespace) -> int:
 
     cfg = _cfg(a.config)
     print(f"Dashboard (read-only) on http://{cfg.dashboard.host}:{cfg.dashboard.port}  - Ctrl+C to stop")
-    compare_dir = None
+    compare_dir = PROJECT_ROOT / "var" / "forward" if a.forward else None
     if a.compare:
         compare_dir = Path(a.compare)
         if not compare_dir.is_absolute():
@@ -277,6 +316,9 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--name")
     c.add_argument("--final-holdout", metavar="REASON", help="open the sealed out-of-sample slice ONCE")
     c.set_defaults(fn=cmd_compare)
+    fs = sub.add_parser("forward-step", help="advance the daily FORWARD paper simulation (all bots)")
+    fs.add_argument("--offline", action="store_true", help="use already-downloaded data, no network")
+    fs.set_defaults(fn=cmd_forward_step)
     sub.add_parser("gate", help="run tests + local simulation and record the paper gate").set_defaults(fn=cmd_gate)
     sub.add_parser("paper-status", help="show why paper trading is (not) allowed").set_defaults(fn=cmd_paper_status)
     f = sub.add_parser("fetch-data", help="fetch Alpaca daily bars (needs YOUR paper/data keys in env)")
@@ -293,6 +335,7 @@ def main(argv: list[str] | None = None) -> int:
         x.add_argument("--db")
         if name == "dashboard":
             x.add_argument("--compare", help="leaderboard folder name under var/compare")
+            x.add_argument("--forward", action="store_true", help="show the daily forward leaderboard")
         x.set_defaults(fn=fn)
     r = sub.add_parser("reset-breaker", help="HUMAN-ONLY reset of a latched breaker")
     r.add_argument("--db")
